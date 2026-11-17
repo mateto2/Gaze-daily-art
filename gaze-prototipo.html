@@ -1,0 +1,913 @@
+<title>Gaze Protótipo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&family=DM+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* Layout: a gallery room; one phone hangs on the wall like a framed work, review notes sit beside it as a wall text. */
+:root {
+  color-scheme: dark;
+  --room: #0a0908;
+  --wall: #13110f;
+  --wall-2: #1c1916;
+  --line: #2e2924;
+  --fg: #ede6d9;
+  --muted: #9b9286;
+  --gilt: #c9a46b;
+  --gilt-ink: #1b150c;
+  --alert: #e38d73;
+  --ok: #93b89d;
+  --scrim: rgba(10, 9, 8, .62);
+  --pin-bg: rgba(19, 17, 15, .72);
+  --halo: rgba(201, 164, 107, .32);
+  --display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --body: "Hanken Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@property --s { syntax: "<number>"; inherits: true; initial-value: 1; }
+
+html { height: 100%; box-sizing: border-box; }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  height: 100%;
+  background: var(--room);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 56px;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+
+/* ---------- Wall text (review notes) ---------- */
+.notes { width: 300px; max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 20px; }
+.notes .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--gilt); }
+.notes h2 { font-family: var(--display); font-style: italic; font-weight: 500; font-size: 34px; line-height: 1.05; margin: 0; text-wrap: balance; }
+.notes p { margin: 0; color: var(--muted); font-size: 14px; }
+.jump { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.jump li { border-bottom: 1px solid var(--line); }
+.jump button { width: 100%; display: flex; gap: 14px; align-items: baseline; text-align: left; background: none; border: 0; padding: 10px 2px; font-size: 14px; }
+.jump button span { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 18px; }
+.jump button[aria-current="true"] { color: var(--gilt); }
+.ghost { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: 13px; color: var(--fg); align-self: flex-start; }
+.ghost:hover { border-color: var(--muted); }
+@media (max-width: 880px) { .notes { display: none; } }
+
+/* ---------- Phone ---------- */
+.phone {
+  width: min(400px, 100%);
+  height: min(860px, 100%);
+  background: var(--wall);
+  border: 1px solid var(--line);
+  border-radius: 38px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 40px 90px -30px #000, 0 0 0 10px #090807;
+}
+@media (max-width: 520px) { .phone { border-radius: 22px; box-shadow: none; } }
+.screens { flex: 1; position: relative; min-height: 0; }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+
+.bar { display: flex; align-items: center; gap: 12px; padding: 14px 16px 12px; flex: none; }
+.bar-title { flex: 1; min-width: 0; }
+.bar-title b { display: block; font-weight: 600; font-size: 15px; }
+.bar-title small { display: block; color: var(--muted); font-size: 12px; }
+.icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--wall-2); display: grid; place-items: center; flex: none; padding: 0; }
+.icon-btn svg { width: 18px; height: 18px; }
+
+.btn { height: 52px; border-radius: 999px; border: 0; font-weight: 600; font-size: 15px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-primary { background: var(--gilt); color: var(--gilt-ink); }
+.btn-primary:disabled { opacity: .4; cursor: default; }
+.btn-quiet { background: var(--wall-2); border: 1px solid var(--line); color: var(--fg); }
+.foot { padding: 12px 16px 16px; flex: none; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); background: var(--wall); }
+.micro { font-size: 12px; color: var(--muted); text-align: center; margin: 0; }
+.label { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+/* ---------- Viewer ---------- */
+.viewer-wrap { position: relative; display: flex; min-height: 0; background: #0c0b09; }
+.viewer { position: relative; overflow: hidden; touch-action: none; flex: 1; min-height: 0; cursor: grab; }
+.viewer:active { cursor: grabbing; }
+.viewer.static { cursor: default; }
+.stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.stage.anim { transition: transform 1.15s cubic-bezier(.65, 0, .25, 1); }
+.viewer.anim { transition: --s 1.15s cubic-bezier(.65, 0, .25, 1); }
+.stage img { width: 100%; height: 100%; display: block; max-width: none; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.ring { fill: none; stroke: var(--gilt); stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1s ease-out; filter: drop-shadow(0 0 3px rgba(0,0,0,.6)); }
+.ring.on { stroke-dashoffset: 0; }
+.pins { position: absolute; inset: 0; }
+.pin { position: absolute; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--fg); background: var(--pin-bg); color: var(--fg); font-size: 11px; font-weight: 600; padding: 0; display: grid; place-items: center; transform: translate(-50%, -50%) scale(calc(1 / var(--s))); transition: box-shadow .2s; }
+.pin.me { background: var(--gilt); border-color: var(--gilt); color: var(--gilt-ink); }
+.pin.active { box-shadow: 0 0 0 7px var(--halo); }
+.zoom-ctrl { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+.zoom-ctrl button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--pin-bg); display: grid; place-items: center; padding: 0; backdrop-filter: blur(6px); }
+.zoom-ctrl svg { width: 16px; height: 16px; }
+
+/* ---------- Home ---------- */
+.home-hero { position: relative; flex: 0 0 47%; overflow: hidden; }
+.home-hero img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 16%; display: block; }
+.home-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(19,17,15,.55) 0%, rgba(19,17,15,0) 22%, rgba(19,17,15,0) 55%, var(--wall) 100%); }
+.home-top { position: absolute; top: 14px; left: 18px; right: 18px; display: flex; justify-content: space-between; align-items: center; z-index: 1; }
+.logo { height: 30px; width: auto; display: block; }
+.streak { display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 9px; border-radius: 999px; background: var(--pin-bg); border: 1px solid var(--line); font-size: 13px; font-weight: 600; backdrop-filter: blur(6px); }
+.streak svg { width: 15px; height: 15px; color: var(--gilt); }
+.home-body { flex: 1; min-height: 0; overflow: auto; padding: 0 24px 18px; margin-top: -44px; position: relative; display: flex; flex-direction: column; gap: 12px; }
+.home-body h1 { font-family: var(--display); font-style: italic; font-weight: 500; font-size: 48px; line-height: .95; margin: 2px 0 0; letter-spacing: -.01em; }
+.artist { margin: 0; font-size: 16px; }
+.wall-label { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0; }
+.ritual { list-style: none; margin: 6px 0 4px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ritual li { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.ritual li::before { content: ""; height: 3px; border-radius: 3px; background: var(--line); }
+.ritual li.done { color: var(--fg); }
+.ritual li.done::before { background: var(--gilt); }
+.ritual b { font-family: var(--mono); font-weight: 400; font-size: 10.5px; color: var(--muted); }
+
+.tabbar { display: flex; border-top: 1px solid var(--line); flex: none; background: var(--wall); }
+.tabbar[hidden] { display: none !important; }
+.tabbar button { flex: 1; background: none; border: 0; padding: 10px 0 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); }
+.tabbar button[aria-current="page"] { color: var(--fg); }
+.tabbar svg { width: 20px; height: 20px; }
+.tabbar .lock { font-family: var(--mono); font-size: 9px; color: var(--gilt); letter-spacing: .08em; }
+
+/* ---------- Observe ---------- */
+.timer { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.timer svg { width: 26px; height: 26px; transform: rotate(-90deg); }
+.timer .track { stroke: var(--line); }
+.timer .prog { stroke: var(--gilt); transition: stroke-dashoffset 1s linear; }
+.hint { position: absolute; left: 12px; right: 60px; bottom: 12px; padding: 10px 14px; border-radius: 14px; background: var(--pin-bg); border: 1px solid var(--line); font-family: var(--display); font-style: italic; font-size: 16px; backdrop-filter: blur(6px); transition: opacity .5s; pointer-events: none; }
+.btn-primary.glow { box-shadow: 0 0 0 6px var(--halo); }
+
+/* ---------- Write ---------- */
+.write-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 6px; display: flex; flex-direction: column; gap: 10px; }
+.write-body h2 { font-family: var(--display); font-weight: 500; font-size: 22px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.pin-toggle { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--wall-2); border-radius: 999px; padding: 7px 12px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed="true"] { border-color: var(--gilt); color: var(--gilt); }
+.chip svg { width: 14px; height: 14px; }
+textarea { width: 100%; min-height: 128px; resize: none; background: var(--wall-2); color: var(--fg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; font: inherit; font-size: 16px; line-height: 1.5; }
+textarea:focus { border-color: var(--gilt); outline: none; }
+textarea::placeholder { color: var(--muted); }
+.meter { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status { border-radius: 12px; padding: 12px 14px; font-size: 14px; display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); background: var(--wall-2); }
+.status.err { border-color: var(--alert); }
+.status.err strong { color: var(--alert); }
+.status.ok { border-color: var(--ok); }
+.status.ok strong { color: var(--ok); }
+.status p { margin: 2px 0 0; color: var(--muted); }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--gilt); animation: spin .8s linear infinite; flex: none; margin-top: 2px; }
+@keyframes spin { to { transform: rotate(1turn); } }
+.prompts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.prompts button { font-size: 12px; padding: 5px 10px; }
+.demo-fill { background: none; border: 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; padding: 0; align-self: flex-start; }
+
+/* ---------- Mural ---------- */
+.sort { display: flex; gap: 6px; padding: 12px 16px 4px; flex: none; }
+.sort .chip[aria-pressed="true"] { background: var(--fg); color: var(--wall); border-color: var(--fg); }
+.feed { flex: 1; min-height: 0; overflow: auto; padding: 6px 16px 12px; display: flex; flex-direction: column; }
+.post { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 34px 1fr; gap: 0 12px; scroll-margin: 12px; transition: background .3s; border-radius: 8px; }
+.post.flash { background: var(--wall-2); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--wall-2); border: 1px solid var(--line); display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+.post.mine .avatar { background: var(--gilt); color: var(--gilt-ink); border-color: var(--gilt); }
+.post-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.post-head b { font-weight: 600; }
+.post-head span { color: var(--muted); font-size: 12px; }
+.post p { margin: 4px 0 8px; font-size: 14.5px; min-width: 0; overflow-wrap: anywhere; }
+.post-actions { display: flex; gap: 16px; }
+.post-actions button { background: none; border: 0; padding: 0; font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; font-variant-numeric: tabular-nums; }
+.post-actions button[aria-pressed="true"] { color: var(--gilt); }
+.post-actions svg { width: 15px; height: 15px; }
+.post-body { min-width: 0; }
+
+/* ---------- Reveal ---------- */
+.reveal-panel { flex: 1; min-height: 0; overflow: auto; padding: 18px 22px 10px; display: flex; flex-direction: column; gap: 8px; }
+.reveal-panel .src { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--gilt); }
+.reveal-panel h2 { font-family: var(--display); font-style: italic; font-weight: 500; font-size: 26px; line-height: 1.1; margin: 0; }
+.reveal-panel p { margin: 0; font-size: 15px; line-height: 1.6; max-width: 62ch; }
+.reveal-panel q { font-family: var(--display); font-style: italic; }
+.echo { margin-top: 6px; align-self: flex-start; }
+.credit { font-size: 11.5px; color: var(--muted); margin-top: auto; padding-top: 10px; }
+.step-nav { display: flex; gap: 10px; align-items: center; }
+.step-nav .btn { flex: 1; }
+.step-nav .icon-btn { width: 52px; height: 52px; }
+.dots { display: flex; gap: 6px; justify-content: center; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .3s, width .3s; }
+.dots i.on { background: var(--gilt); width: 18px; border-radius: 3px; }
+
+/* ---------- Done ---------- */
+.done-body { flex: 1; min-height: 0; overflow: auto; padding: 28px 24px 16px; display: flex; flex-direction: column; gap: 18px; align-items: center; text-align: center; }
+.done-thumb { width: 116px; aspect-ratio: 960 / 1431; max-width: 100%; border-radius: 4px; overflow: hidden; box-shadow: 0 0 0 6px var(--wall-2), 0 0 0 7px var(--line); margin-top: 8px; }
+.done-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.done-body h2 { font-family: var(--display); font-style: italic; font-weight: 500; font-size: 34px; line-height: 1.05; margin: 6px 0 0; }
+.done-body > p { margin: 0; color: var(--muted); max-width: 30ch; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; max-width: 300px; }
+.week div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.week i { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; }
+.week .on i { background: var(--gilt); border-color: var(--gilt); color: var(--gilt-ink); }
+.week .on i svg { width: 14px; height: 14px; }
+.week .today { color: var(--fg); }
+.tomorrow { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background: var(--wall-2); }
+.tomorrow p { margin: 0; font-family: var(--display); font-style: italic; font-size: 18px; line-height: 1.3; }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; }
+.switch { position: relative; width: 44px; height: 26px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .2s; pointer-events: none; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--fg); transition: transform .2s; }
+.switch input:checked + span { background: var(--gilt); }
+.switch input:checked + span::after { transform: translateX(18px); }
+.switch input:focus-visible + span { outline: 2px solid var(--gilt); outline-offset: 2px; }
+
+/* ---------- Sheet & toast ---------- */
+.sheet { position: absolute; inset: 0; background: var(--scrim); z-index: 20; display: flex; align-items: flex-end; }
+.sheet-card { width: 100%; background: var(--wall-2); border-top: 1px solid var(--line); border-radius: 26px 26px 0 0; padding: 22px 22px 20px; display: flex; flex-direction: column; gap: 12px; animation: up .35s cubic-bezier(.2, .8, .2, 1); }
+@keyframes up { from { transform: translateY(40px); opacity: 0; } }
+.sheet-card h3 { font-family: var(--display); font-style: italic; font-weight: 500; font-size: 30px; margin: 0; }
+.sheet-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.sheet-card li { display: flex; gap: 10px; font-size: 14.5px; }
+.sheet-card li svg { width: 18px; height: 18px; color: var(--gilt); flex: none; margin-top: 2px; }
+.price { font-size: 13px; color: var(--muted); }
+.price b { color: var(--fg); font-size: 18px; font-weight: 600; }
+.toast { position: absolute; top: 14px; left: 16px; right: 16px; z-index: 30; background: var(--fg); color: var(--wall); border-radius: 14px; padding: 12px 14px; font-size: 13.5px; font-weight: 500; animation: up .3s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage.anim, .viewer.anim { transition-duration: .01s; }
+  .ring { transition-duration: .01s; }
+  .sheet-card, .toast { animation: none; }
+}
+</style>
+
+<aside class="notes" aria-label="Notas do protótipo">
+  <div class="eyebrow">Protótipo · v0.1</div>
+  <h2>Um dia no Gaze</h2>
+  <p>Fluxo completo da obra do dia: observar, escrever, ver o mural e ler os críticos. Pule para qualquer tela pela lista abaixo.</p>
+  <ol class="jump" id="jump">
+    <li><button data-go="home"><span>1</span>Início</button></li>
+    <li><button data-go="observe"><span>2</span>Observar</button></li>
+    <li><button data-go="write"><span>3</span>Escrever</button></li>
+    <li><button data-go="mural"><span>4</span>Mural</button></li>
+    <li><button data-go="reveal"><span>5</span>Críticos</button></li>
+    <li><button data-go="done"><span>6</span>Sequência</button></li>
+  </ol>
+  <p>A verificação de esforço aqui usa regras simples no navegador. No app real, quem faz isso é uma IA, que também modera o mural.</p>
+  <p>Os textos dos críticos são resumos com crédito. Trechos entre aspas só aparecem quando a obra original já está em domínio público.</p>
+  <button class="ghost" id="restart">Recomeçar o dia</button>
+</aside>
+
+<div class="phone" id="phone">
+  <div class="screens">
+
+    <!-- 1. Home -->
+    <section class="screen" id="s-home" aria-label="Início">
+      <div class="home-hero">
+        <img src="mona.jpg" alt="Detalhe do rosto da Mona Lisa">
+        <div class="home-top">
+          <svg class="logo" viewBox="0 0 120 40" role="img" aria-label="Gaze">
+            <path d="M58 6 C 86 2, 116 12, 113 23 C 110 34, 70 38, 40 35 C 14 33, 3 25, 6 16 C 9 8, 30 4, 52 5" fill="none" stroke="#c9a46b" stroke-width="1.4" stroke-linecap="round"/>
+            <text x="60" y="27" text-anchor="middle" font-family="Bodoni Moda, Didot, Georgia, serif" font-style="italic" font-size="22" font-weight="500" fill="#ede6d9">gaze</text>
+          </svg>
+          <div class="streak" aria-label="Sequência de dias">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 3.5 5 5.5 5 11a5 5 0 0 1-10 0c0-2.4 1.1-3.9 2.3-5 .2 1.6.9 2.7 2 3.2C10.8 8.6 11.3 5 12 2z"/></svg>
+            <span id="streak-n">6</span> dias
+          </div>
+        </div>
+      </div>
+      <div class="home-body">
+        <div class="label">Sexta, 13 de novembro · Obra do dia</div>
+        <h1>Mona Lisa</h1>
+        <p class="artist">Leonardo da Vinci · c. 1503–1519</p>
+        <p class="wall-label">Óleo sobre madeira de choupo · 77 × 53 cm<br>Musée du Louvre, Paris</p>
+        <ol class="ritual" id="ritual" aria-label="Etapas de hoje">
+          <li data-k="observe"><b>1</b>Observar</li>
+          <li data-k="write"><b>2</b>Escrever</li>
+          <li data-k="mural"><b>3</b>Mural</li>
+          <li data-k="reveal"><b>4</b>Críticos</li>
+        </ol>
+        <button class="btn btn-primary" id="start">Começar a observar</button>
+        <p class="micro" id="start-sub">Cerca de 6 minutos. Ninguém vê sua leitura antes de você publicar.</p>
+      </div>
+    </section>
+
+    <!-- 2. Observe -->
+    <section class="screen" id="s-observe" aria-label="Observar" hidden>
+      <div class="bar">
+        <button class="icon-btn" data-go="home" aria-label="Voltar ao início"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bar-title"><b>Observe com calma</b><small>Arraste e aproxime os detalhes</small></div>
+        <div class="timer" aria-label="Tempo sugerido">
+          <svg viewBox="0 0 26 26" aria-hidden="true"><circle class="track" cx="13" cy="13" r="10.5" fill="none" stroke-width="2.5"/><circle class="prog" id="timer-prog" cx="13" cy="13" r="10.5" fill="none" stroke-width="2.5" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0"/></svg>
+          <span id="timer-txt">2:00</span>
+        </div>
+      </div>
+      <div class="viewer-wrap" style="flex:1">
+        <div id="v-observe"></div>
+        <div class="hint" id="hint" aria-live="polite">Para onde seu olho vai primeiro?</div>
+        <div class="zoom-ctrl" data-for="observe"></div>
+      </div>
+      <div class="foot">
+        <button class="btn btn-primary" id="ready">Estou pronto</button>
+        <p class="micro">Pinça, roda do mouse ou toque duplo para aproximar.</p>
+      </div>
+    </section>
+
+    <!-- 3. Write -->
+    <section class="screen" id="s-write" aria-label="Escrever" hidden>
+      <div class="bar">
+        <button class="icon-btn" data-go="observe" aria-label="Voltar a observar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="bar-title"><b>Sua leitura</b><small>Desbloqueia o mural e os críticos</small></div>
+      </div>
+      <div class="viewer-wrap" style="flex:0 0 34%">
+        <div id="v-write"></div>
+        <div class="zoom-ctrl" data-for="write"></div>
+      </div>
+      <form class="write-body" id="write-form" novalidate>
+        <div class="pin-toggle">
+          <button type="button" class="chip" id="pin-mode" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/></svg>
+            Marcar um detalhe
+          </button>
+          <span class="micro" id="pin-state" style="text-align:left">Opcional: toque na obra para apontar o que viu.</span>
+        </div>
+        <h2><label for="reading">O que você vê nesta pintura? O que ela parece dizer?</label></h2>
+        <textarea id="reading" placeholder="Ex.: o que chamou sua atenção, o que ela parece sentir, o que o fundo conta…"></textarea>
+        <div class="meter"><span id="word-count">0 palavras</span><span>Uma ideia completa já basta</span></div>
+        <div id="status" aria-live="polite"></div>
+        <button type="button" class="demo-fill" id="demo-fill">Protótipo: preencher com um exemplo</button>
+      </form>
+      <div class="foot">
+        <button class="btn btn-primary" id="submit" form="write-form" type="submit" disabled>Publicar minha leitura</button>
+      </div>
+    </section>
+
+    <!-- 4. Mural -->
+    <section class="screen" id="s-mural" aria-label="Mural" hidden>
+      <div class="bar">
+        <button class="icon-btn" data-go="home" aria-label="Voltar ao início"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="bar-title"><b>Mural de hoje</b><small>1.284 leituras · toque num ponto da obra</small></div>
+      </div>
+      <div class="viewer-wrap" style="flex:0 0 32%">
+        <div id="v-mural"></div>
+        <div class="zoom-ctrl" data-for="mural"></div>
+      </div>
+      <div class="sort" role="group" aria-label="Ordenar leituras">
+        <button class="chip" data-sort="top" aria-pressed="true">Mais curtidas</button>
+        <button class="chip" data-sort="new" aria-pressed="false">Recentes</button>
+      </div>
+      <div class="feed" id="feed"></div>
+      <div class="foot">
+        <button class="btn btn-primary" data-go="reveal">Ver o que os críticos viram</button>
+      </div>
+    </section>
+
+    <!-- 5. Reveal -->
+    <section class="screen" id="s-reveal" aria-label="Leitura dos críticos" hidden>
+      <div class="bar">
+        <button class="icon-btn" data-go="mural" aria-label="Voltar ao mural"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="bar-title"><b>O que os críticos viram</b><small id="step-count">1 de 5</small></div>
+      </div>
+      <div class="viewer-wrap" style="flex:0 0 50%">
+        <div id="v-reveal"></div>
+      </div>
+      <div class="reveal-panel" id="reveal-panel" aria-live="polite"></div>
+      <div class="foot">
+        <div class="dots" id="dots" aria-hidden="true"></div>
+        <div class="step-nav">
+          <button class="icon-btn" id="prev" aria-label="Trecho anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <button class="btn btn-primary" id="next">Continuar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Done -->
+    <section class="screen" id="s-done" aria-label="Obra concluída" hidden>
+      <div class="done-body">
+        <div class="done-thumb"><img src="mona.jpg" alt="Mona Lisa"></div>
+        <div class="label">Obra do dia concluída</div>
+        <h2><span id="done-streak">7</span> dias seguidos</h2>
+        <p>Sua leitura ficou no mural de hoje. Amanhã tem outra obra esperando por você.</p>
+        <div class="week" aria-label="Esta semana">
+          <div class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>S</div>
+          <div class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>T</div>
+          <div class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>Q</div>
+          <div class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>Q</div>
+          <div class="on today"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>S</div>
+          <div><i></i>S</div>
+          <div><i></i>D</div>
+        </div>
+        <div class="tomorrow">
+          <div class="label">Amanhã às 8h</div>
+          <p>Uma paisagem portuária que acabou dando nome a um movimento inteiro.</p>
+          <div class="switch-row">
+            <label for="notify">Lembrar todo dia às 8h</label>
+            <span class="switch"><input type="checkbox" id="notify" checked><span></span></span>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <button class="btn btn-quiet" data-go="home">Voltar ao início</button>
+      </div>
+    </section>
+  </div>
+
+  <nav class="tabbar" id="tabbar" aria-label="Navegação principal">
+    <button aria-current="page" data-go="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="1"/><rect x="7.5" y="6.5" width="9" height="11"/></svg>Hoje
+    </button>
+    <button data-paywall="archive">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="7" height="7"/><rect x="14" y="4" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Arquivo <span class="lock">GAZE+</span>
+    </button>
+    <button data-paywall="journal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6z"/><path d="M6 3v18M10 8h5M10 12h5"/></svg>Diário <span class="lock">GAZE+</span>
+    </button>
+  </nav>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="label" id="sheet-why">Arquivo</div>
+      <h3 id="sheet-title">Gaze+</h3>
+      <ul>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>Volte a todas as obras anteriores, com mural e críticos</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>Diário com todas as suas leituras, para reler meses depois</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>Leituras extras de outros críticos em cada obra</li>
+      </ul>
+      <p class="price"><b>R$ 14,90</b> por mês · preço ilustrativo</p>
+      <button class="btn btn-primary" id="subscribe">Assinar Gaze+</button>
+      <button class="btn btn-quiet" id="sheet-close">Agora não</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const IMG = { w: 960, h: 1431 };
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = (t) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* ---------------- Viewer (pan, zoom, pins, hand-drawn rings) ---------------- */
+  class Viewer {
+    constructor(root, opts = {}) {
+      this.root = root; this.opts = opts;
+      root.className = "viewer" + (opts.interactive === false ? " static" : "");
+      root.innerHTML = '<div class="stage"><img src="mona.jpg" alt="' + (opts.alt || "Mona Lisa, de Leonardo da Vinci") + '" draggable="false">' +
+        '<svg class="marks" viewBox="0 0 960 1431" preserveAspectRatio="none" aria-hidden="true"></svg><div class="pins"></div></div>';
+      this.stage = $(".stage", root); this.svg = $(".marks", root); this.pinsEl = $(".pins", root);
+      this.s = 1; this.tx = 0; this.ty = 0; this.view = { fx: .5, fy: .5, s: 1 };
+      this.ptrs = new Map();
+      if (opts.interactive !== false) this.bind();
+      new ResizeObserver(() => this.layout()).observe(root);
+    }
+    layout() {
+      const W = this.root.clientWidth, H = this.root.clientHeight;
+      if (!W || !H) return;
+      const a = IMG.w / IMG.h; let w, h;
+      if (W / H > a) { h = H; w = H * a; } else { w = W; h = W / a; }
+      Object.assign(this, { W, H, w, h });
+      this.stage.style.width = w + "px"; this.stage.style.height = h + "px";
+      this.focus(this.view.fx, this.view.fy, this.view.s, false);
+    }
+    apply(anim) {
+      this.stage.classList.toggle("anim", !!anim);
+      this.root.classList.toggle("anim", !!anim);
+      this.stage.style.transform = "translate(" + this.tx + "px," + this.ty + "px) scale(" + this.s + ")";
+      this.root.style.setProperty("--s", this.s);
+    }
+    clamp() {
+      const sw = this.s * this.w, sh = this.s * this.h;
+      this.tx = sw <= this.W ? (this.W - sw) / 2 : Math.min(0, Math.max(this.W - sw, this.tx));
+      this.ty = sh <= this.H ? (this.H - sh) / 2 : Math.min(0, Math.max(this.H - sh, this.ty));
+    }
+    remember() {
+      this.view = { fx: (this.W / 2 - this.tx) / (this.s * this.w), fy: (this.H / 2 - this.ty) / (this.s * this.h), s: this.s };
+    }
+    focus(fx, fy, s, anim = true) {
+      this.view = { fx, fy, s };
+      if (!this.w) return;
+      this.s = s; this.tx = this.W / 2 - s * fx * this.w; this.ty = this.H / 2 - s * fy * this.h;
+      this.clamp(); this.apply(anim);
+    }
+    reset(anim = true) { this.focus(.5, .5, 1, anim); }
+    zoomAt(px, py, f) {
+      const ns = Math.min(6, Math.max(1, this.s * f)), k = ns / this.s;
+      this.tx = px - (px - this.tx) * k; this.ty = py - (py - this.ty) * k; this.s = ns;
+      this.clamp(); this.apply(false); this.remember();
+    }
+    zoomBy(f) { this.zoomAt(this.W / 2, this.H / 2, f); }
+    local(e) { const r = this.root.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    toImage(px, py) { return [(px - this.tx) / (this.s * this.w), (py - this.ty) / (this.s * this.h)]; }
+    bind() {
+      const r = this.root;
+      r.addEventListener("pointerdown", (e) => {
+        if (e.target.closest(".pin")) return;
+        r.setPointerCapture(e.pointerId);
+        const p = this.local(e);
+        this.ptrs.set(e.pointerId, p);
+        this.down = this.ptrs.size === 1 ? { p, moved: false } : null;
+        this.pinch = null;
+      });
+      r.addEventListener("pointermove", (e) => {
+        if (!this.ptrs.has(e.pointerId)) return;
+        const prev = this.ptrs.get(e.pointerId), cur = this.local(e);
+        this.ptrs.set(e.pointerId, cur);
+        if (this.ptrs.size === 1) {
+          if (this.down && Math.hypot(cur[0] - this.down.p[0], cur[1] - this.down.p[1]) > 6) this.down.moved = true;
+          this.tx += cur[0] - prev[0]; this.ty += cur[1] - prev[1];
+          this.clamp(); this.apply(false); this.remember();
+        } else if (this.ptrs.size === 2) {
+          const [a, b] = [...this.ptrs.values()];
+          const d = Math.hypot(a[0] - b[0], a[1] - b[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          if (this.pinch) {
+            this.zoomAt(m[0], m[1], d / this.pinch.d);
+            this.tx += m[0] - this.pinch.m[0]; this.ty += m[1] - this.pinch.m[1];
+            this.clamp(); this.apply(false); this.remember();
+          }
+          this.pinch = { d, m };
+        }
+      });
+      const up = (e) => {
+        if (!this.ptrs.has(e.pointerId)) return;
+        this.ptrs.delete(e.pointerId); this.pinch = null;
+        if (this.down && !this.down.moved && e.type === "pointerup") {
+          const p = this.local(e), now = performance.now();
+          if (this.lastTap && now - this.lastTap.t < 320 && Math.hypot(p[0] - this.lastTap.p[0], p[1] - this.lastTap.p[1]) < 30) {
+            clearTimeout(this.tapTimer); this.lastTap = null;
+            if (this.s > 1.2) this.reset(true);
+            else { const [fx, fy] = this.toImage(p[0], p[1]); this.focus(fx, fy, 2.6, true); }
+          } else {
+            this.lastTap = { p, t: now };
+            if (this.opts.onTap) {
+              this.tapTimer = setTimeout(() => {
+                const [fx, fy] = this.toImage(p[0], p[1]);
+                if (fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) this.opts.onTap(fx, fy);
+              }, 260);
+            }
+          }
+        }
+        this.down = null;
+      };
+      r.addEventListener("pointerup", up);
+      r.addEventListener("pointercancel", up);
+      r.addEventListener("wheel", (e) => { e.preventDefault(); const [x, y] = this.local(e); this.zoomAt(x, y, Math.exp(-e.deltaY * 0.0018)); }, { passive: false });
+    }
+    clearMarks() { this.svg.innerHTML = ""; }
+    ring(cx, cy, rx, ry, delay = 0) {
+      const pts = [], start = -2.3, turns = 1.12, n = 90;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, a = start + t * turns * Math.PI * 2, j = 1 + 0.05 * Math.sin(t * 7.3) + 0.06 * t;
+        pts.push((cx + Math.cos(a) * rx * j).toFixed(1) + " " + (cy + Math.sin(a) * ry * j).toFixed(1));
+      }
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M" + pts.join(" L"));
+      path.setAttribute("pathLength", "1");
+      path.setAttribute("class", "ring");
+      const target = (this.view.s || 1) * (this.w || 300);
+      path.setAttribute("stroke-width", (2.6 * IMG.w / target).toFixed(2));
+      path.style.transitionDelay = delay + "ms";
+      this.svg.appendChild(path);
+      requestAnimationFrame(() => requestAnimationFrame(() => path.classList.add("on")));
+    }
+    setPins(list) {
+      this.pinsEl.innerHTML = "";
+      list.forEach((p) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "pin" + (p.cls ? " " + p.cls : "");
+        b.style.left = p.fx * 100 + "%"; b.style.top = p.fy * 100 + "%";
+        b.textContent = p.label || "";
+        b.setAttribute("aria-label", p.aria || "Detalhe marcado");
+        b.dataset.id = p.id;
+        if (p.onClick) b.addEventListener("click", p.onClick);
+        this.pinsEl.appendChild(b);
+      });
+    }
+    activatePin(id) { $$(".pin", this.pinsEl).forEach((b) => b.classList.toggle("active", b.dataset.id === String(id))); }
+  }
+
+  function zoomControls(el, viewer) {
+    el.innerHTML =
+      '<button type="button" aria-label="Aproximar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>' +
+      '<button type="button" aria-label="Afastar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>' +
+      '<button type="button" aria-label="Ver a obra inteira"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>';
+    const [inB, outB, fitB] = $$("button", el);
+    inB.onclick = () => viewer.zoomBy(1.5);
+    outB.onclick = () => viewer.zoomBy(1 / 1.5);
+    fitB.onclick = () => viewer.reset(true);
+  }
+
+  /* ---------------- Content ---------------- */
+  const COMMENTS = [
+    { id: 1, name: "Ana", city: "São Paulo", t: "há 2 h", ago: 120, likes: 128, fx: .45, fy: .23,
+      text: "Os olhos parecem me seguir, mas a boca não. É como se ela soubesse algo que eu ainda não percebi." },
+    { id: 2, name: "Rafael", city: "Recife", t: "há 1 h", ago: 60, likes: 96, fx: .15, fy: .38,
+      text: "O horizonte do lado esquerdo é bem mais baixo que o do direito. Quando olho para a esquerda, ela parece mais alta." },
+    { id: 3, name: "Júlia", city: "Porto Alegre", t: "há 3 h", ago: 180, likes: 74, fx: .42, fy: .83,
+      text: "As mãos estão totalmente relaxadas, uma sobre a outra. Para mim a pintura fala de calma, não de mistério." },
+    { id: 4, name: "Theo", city: "Lisboa", t: "há 40 min", ago: 40, likes: 51, fx: .84, fy: .3,
+      text: "A paisagem atrás não tem nenhuma pessoa, só água e pedra. Parece um mundo muito mais antigo do que ela." },
+    { id: 5, name: "Marina", city: "Belo Horizonte", t: "há 25 min", ago: 25, likes: 43, fx: .46, fy: .17,
+      text: "Ela não tem joias nem sobrancelhas. Parece que o pintor tirou tudo que pudesse distrair do rosto." },
+    { id: 6, name: "Caio", city: "Curitiba", t: "há 10 min", ago: 10, likes: 19, fx: .1, fy: .53,
+      text: "Tem um caminho sinuoso à esquerda que leva o olhar direto até o ombro dela. Não tinha reparado antes de aproximar." }
+  ];
+
+  const STEPS = [
+    { src: "Giorgio Vasari · Vidas dos Artistas, 1550", who: "O retrato que parecia respirar",
+      html: "Vasari, o primeiro grande biógrafo dos artistas do Renascimento, conta que os olhos tinham o brilho úmido de olhos vivos e que, olhando de perto a base do pescoço, parecia possível ver o pulso batendo. Para ele, o feito de Leonardo era fazer a tinta parecer carne.",
+      focus: [.45, .25, 2.5], rings: [[432, 333, 125, 42]] },
+    { src: "Ernst Gombrich · A História da Arte, 1950", who: "Um sorriso sem contorno",
+      html: "Gombrich explica o efeito pelo <em>sfumato</em>: Leonardo deixou os cantos da boca e dos olhos dissolvidos em sombra, sem linha firme. Como falta a informação exata, quem olha completa o resto, e a expressão parece mudar a cada vez que voltamos a ela.",
+      focus: [.45, .31, 3.6], rings: [[430, 447, 64, 26]] },
+    { src: "Ernst Gombrich · A História da Arte, 1950", who: "Dois horizontes diferentes",
+      html: "Gombrich também aponta que a paisagem não se encaixa: o horizonte da esquerda está bem mais baixo que o da direita. Quando o olhar está à esquerda, a figura parece mais alta e ereta; à direita, um pouco menor.",
+      echo: { id: 2, label: "Rafael viu isso hoje no mural" },
+      focus: [.5, .33, 1.15], rings: [[150, 545, 150, 42], [810, 388, 140, 40]] },
+    { src: "Walter Pater · O Renascimento, 1873", who: "Mais antiga que a paisagem",
+      html: "Pater leu a mulher e o fundo como uma coisa só. Para ele, ela carrega o peso de muitos séculos, e escreveu que ela é <q>mais velha que as rochas entre as quais está sentada</q>.",
+      focus: [.83, .34, 2.4], rings: [[815, 470, 125, 135]] },
+    { src: "Síntese da curadoria Gaze", who: "O que une essas leituras",
+      html: "Nenhum dos três diz o que ela está pensando. Todos apontam como Leonardo deixou espaços em aberto: o sorriso, o horizonte, o fundo sem gente. A pintura funciona quase como um espelho, e cada época leu nela o próprio humor.",
+      focus: [.5, .5, 1], rings: [] }
+  ];
+
+  const HINTS = [
+    "Para onde seu olho vai primeiro?",
+    "O que ela parece sentir agora?",
+    "Repare na luz: de onde ela vem?",
+    "O que o fundo conta sobre ela?",
+    "Aproxime as mãos. O que elas dizem?"
+  ];
+
+  /* ---------------- State ---------------- */
+  const state = { done: new Set(), text: "", pin: null, liked: new Set(), sort: "top", step: 0, streak: 6 };
+
+  /* ---------------- Navigation ---------------- */
+  const viewers = {};
+  function show(name) {
+    if (name === "write" && !state.done.has("observe")) state.done.add("observe");
+    if ((name === "mural" || name === "reveal") && !state.done.has("write")) {
+      // Prototype jump: fill a sample reading so later screens have content.
+      if (!state.text) { state.text = SAMPLE; state.done.add("observe"); }
+      state.done.add("write");
+    }
+    $$(".screen").forEach((s) => (s.hidden = s.id !== "s-" + name));
+    $("#tabbar").hidden = !(name === "home" || name === "done");
+    $$("#jump button").forEach((b) => b.setAttribute("aria-current", b.dataset.go === name ? "true" : "false"));
+    stopTimer();
+    if (name === "home") enterHome();
+    if (name === "observe") enterObserve();
+    if (name === "write") enterWrite();
+    if (name === "mural") enterMural();
+    if (name === "reveal") enterReveal();
+    if (name === "done") enterDone();
+    requestAnimationFrame(() => Object.values(viewers).forEach((v) => v.layout()));
+  }
+  document.addEventListener("click", (e) => {
+    const go = e.target.closest("[data-go]");
+    if (go) { show(go.dataset.go); return; }
+    const pw = e.target.closest("[data-paywall]");
+    if (pw) openSheet(pw.dataset.paywall);
+  });
+
+  /* ---------------- Home ---------------- */
+  function enterHome() {
+    $$("#ritual li").forEach((li) => li.classList.toggle("done", state.done.has(li.dataset.k)));
+    const complete = state.done.has("reveal");
+    $("#start").textContent = complete ? "Rever o mural de hoje" : state.done.has("observe") ? "Continuar de onde parei" : "Começar a observar";
+    $("#start-sub").textContent = complete ? "Volte amanhã às 8h para a próxima obra." : "Cerca de 6 minutos. Ninguém vê sua leitura antes de você publicar.";
+    $("#streak-n").textContent = state.streak;
+  }
+  $("#start").onclick = () => {
+    if (state.done.has("reveal")) show("mural");
+    else if (state.done.has("write")) show("mural");
+    else if (state.done.has("observe")) show("write");
+    else show("observe");
+  };
+
+  /* ---------------- Observe ---------------- */
+  const TOTAL = 120; let remaining = TOTAL, timer = null, hintIdx = 0;
+  function enterObserve() {
+    viewers.observe.reset(false);
+    remaining = TOTAL; hintIdx = 0;
+    $("#hint").textContent = HINTS[0];
+    $("#ready").classList.remove("glow");
+    renderTimer();
+    timer = setInterval(() => {
+      remaining = Math.max(0, remaining - 1);
+      renderTimer();
+      if (remaining % 20 === 0 && remaining > 0) {
+        const h = $("#hint"); h.style.opacity = 0;
+        setTimeout(() => { hintIdx = (hintIdx + 1) % HINTS.length; h.textContent = HINTS[hintIdx]; h.style.opacity = 1; }, 450);
+      }
+      if (remaining === 0) { stopTimer(); $("#ready").classList.add("glow"); $("#hint").textContent = "Tempo sugerido concluído. Escreva quando quiser."; }
+    }, 1000);
+  }
+  function renderTimer() {
+    const m = Math.floor(remaining / 60), s = String(remaining % 60).padStart(2, "0");
+    $("#timer-txt").textContent = m + ":" + s;
+    $("#timer-prog").setAttribute("stroke-dashoffset", String(1 - remaining / TOTAL));
+  }
+  function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+  $("#ready").onclick = () => { state.done.add("observe"); show("write"); };
+
+  /* ---------------- Write ---------------- */
+  const SAMPLE = "Ela parece calma, mas o sorriso some quando olho direto para a boca e volta quando olho para os olhos. A paisagem atrás é vazia e meio irreal, como se ela estivesse num lugar fora do tempo.";
+  let pinMode = false;
+  function enterWrite() {
+    viewers.write.reset(false);
+    $("#reading").value = state.text;
+    updateMeter(); renderWritePin();
+    if (!state.done.has("write")) $("#status").innerHTML = "";
+  }
+  function words(t) { return t.trim().split(/\s+/).filter((w) => /[a-zà-ü]{2,}/i.test(w)); }
+  function updateMeter() {
+    const n = words($("#reading").value).length;
+    $("#word-count").textContent = n + (n === 1 ? " palavra" : " palavras");
+    $("#submit").disabled = $("#reading").value.trim().length === 0;
+  }
+  $("#reading").addEventListener("input", () => { updateMeter(); state.text = $("#reading").value; });
+  $("#demo-fill").onclick = () => { $("#reading").value = SAMPLE; state.text = SAMPLE; updateMeter(); };
+  $("#pin-mode").onclick = () => {
+    pinMode = !pinMode;
+    $("#pin-mode").setAttribute("aria-pressed", String(pinMode));
+    $("#pin-state").textContent = pinMode ? "Toque no ponto da obra que você quer apontar." : state.pin ? "Detalhe marcado. Toque de novo na obra para mudar." : "Opcional: toque na obra para apontar o que viu.";
+  };
+  function renderWritePin() {
+    viewers.write.setPins(state.pin ? [{ id: "me", fx: state.pin[0], fy: state.pin[1], cls: "me", label: "•", aria: "Seu detalhe marcado" }] : []);
+  }
+
+  // Simulated effort check. In the real app this call goes to an AI model that only
+  // judges whether the person genuinely engaged with the painting, never whether they are "right".
+  function checkEffort(t) {
+    const s = t.trim(), ws = words(s);
+    if (/(.)\1{3,}/i.test(s.replace(/\s/g, ""))) return { ok: false, msg: "Parece que há letras repetidas. Conte com suas palavras o que você notou." };
+    if (ws.length < 8) return { ok: false, msg: "Ainda está curto. Diga o que chamou sua atenção e por quê, em uma ou duas frases." };
+    const uniq = new Set(ws.map((w) => w.toLowerCase()));
+    if (uniq.size / ws.length < 0.55) return { ok: false, msg: "Há muitas palavras repetidas. Tente descrever um detalhe específico da obra." };
+    const noVowel = ws.filter((w) => !/[aeiouáéíóúâêôãõà]/i.test(w)).length;
+    if (noVowel / ws.length > 0.25) return { ok: false, msg: "Não consegui entender o texto. Escreva frases sobre o que você vê na pintura." };
+    return { ok: true };
+  }
+  $("#write-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const t = $("#reading").value;
+    const st = $("#status");
+    st.innerHTML = '<div class="status"><span class="spin"></span><div><strong>Lendo sua interpretação…</strong><p>Só verificamos se há uma ideia sua. Não existe resposta certa.</p></div></div>';
+    $("#submit").disabled = true;
+    setTimeout(() => {
+      const r = checkEffort(t);
+      if (!r.ok) {
+        st.innerHTML = '<div class="status err"><div><strong>Quase lá</strong><p>' + r.msg + '</p><div class="prompts">' +
+          ["O que ela parece sentir?", "O que o fundo conta?", "Que detalhe surpreendeu você?"].map((q) => '<button type="button" class="chip">' + q + "</button>").join("") +
+          "</div></div></div>";
+        $$(".prompts .chip", st).forEach((b) => (b.onclick = () => { const ta = $("#reading"); ta.focus(); ta.placeholder = b.textContent; }));
+        $("#submit").disabled = false;
+        return;
+      }
+      state.text = t; state.done.add("write");
+      st.innerHTML = '<div class="status ok"><div><strong>Leitura publicada</strong><p>Obrigado por olhar com calma. Abrindo o mural…</p></div></div>';
+      setTimeout(() => show("mural"), 900);
+    }, 1100);
+  });
+
+  /* ---------------- Mural ---------------- */
+  function enterMural() {
+    state.done.add("mural");
+    viewers.mural.reset(false);
+    renderFeed();
+  }
+  function allPosts() {
+    const list = COMMENTS.slice().sort((a, b) => state.sort === "top" ? b.likes - a.likes : a.ago - b.ago);
+    const mine = { id: "me", name: "Você", city: "", t: "agora", likes: 0, fx: state.pin ? state.pin[0] : null, fy: state.pin ? state.pin[1] : null, text: state.text || SAMPLE, mine: true };
+    return [mine, ...list];
+  }
+  function renderFeed() {
+    const posts = allPosts();
+    $("#feed").innerHTML = posts.map((p) => {
+      const liked = state.liked.has(p.id), n = p.likes + (liked ? 1 : 0);
+      return '<article class="post' + (p.mine ? " mine" : "") + '" id="post-' + p.id + '">' +
+        '<div class="avatar" aria-hidden="true">' + p.name[0] + "</div>" +
+        '<div class="post-body"><div class="post-head"><b>' + esc(p.name) + "</b><span>" + (p.city ? esc(p.city) + " · " : "") + p.t + "</span></div>" +
+        "<p>" + esc(p.text) + "</p>" +
+        '<div class="post-actions">' +
+        (p.mine ? "" : '<button type="button" data-like="' + p.id + '" aria-pressed="' + liked + '" aria-label="Curtir"><svg viewBox="0 0 24 24" fill="' + (liked ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>' + n + "</button>") +
+        (p.fx != null ? '<button type="button" data-see="' + p.id + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/></svg>Ver na obra</button>' : "") +
+        "</div></div></article>";
+    }).join("");
+    viewers.mural.setPins(posts.filter((p) => p.fx != null).map((p) => ({
+      id: p.id, fx: p.fx, fy: p.fy, cls: p.mine ? "me" : "", label: p.name[0], aria: "Detalhe apontado por " + p.name,
+      onClick: () => focusPost(p.id, false)
+    })));
+  }
+  function focusPost(id, zoom) {
+    const p = allPosts().find((x) => String(x.id) === String(id));
+    if (!p) return;
+    viewers.mural.activatePin(id);
+    if (zoom && p.fx != null) viewers.mural.focus(p.fx, p.fy, 2.4, true);
+    const el = $("#post-" + id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200);
+    }
+  }
+  $("#feed").addEventListener("click", (e) => {
+    const like = e.target.closest("[data-like]");
+    if (like) {
+      const id = Number(like.dataset.like);
+      state.liked.has(id) ? state.liked.delete(id) : state.liked.add(id);
+      renderFeed(); return;
+    }
+    const see = e.target.closest("[data-see]");
+    if (see) focusPost(see.dataset.see === "me" ? "me" : Number(see.dataset.see), true);
+  });
+  $$(".sort .chip").forEach((b) => (b.onclick = () => {
+    state.sort = b.dataset.sort;
+    $$(".sort .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderFeed();
+  }));
+
+  /* ---------------- Reveal ---------------- */
+  function enterReveal() {
+    state.step = 0;
+    $("#dots").innerHTML = STEPS.map(() => "<i></i>").join("");
+    viewers.reveal.reset(false);
+    setTimeout(() => renderStep(), 60);
+  }
+  let ringTimer = null;
+  function renderStep() {
+    const st = STEPS[state.step], v = viewers.reveal;
+    $("#step-count").textContent = (state.step + 1) + " de " + STEPS.length;
+    $$("#dots i").forEach((d, i) => d.classList.toggle("on", i === state.step));
+    $("#reveal-panel").innerHTML =
+      '<div class="src">' + st.src + "</div><h2>" + st.who + "</h2><p>" + st.html + "</p>" +
+      (st.echo ? '<button type="button" class="chip echo" id="echo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H8l-4 4z"/></svg>' + st.echo.label + "</button>" : "") +
+      (state.step === STEPS.length - 1 ? '<p class="credit">Resumos escritos pela curadoria Gaze a partir das obras citadas. Citação direta apenas de texto em domínio público.</p>' : "");
+    $("#reveal-panel").scrollTop = 0;
+    if (st.echo) $("#echo").onclick = () => { show("mural"); setTimeout(() => focusPost(st.echo.id, true), 120); };
+    v.clearMarks(); clearTimeout(ringTimer);
+    v.focus(st.focus[0], st.focus[1], st.focus[2], true);
+    ringTimer = setTimeout(() => st.rings.forEach((r, i) => v.ring(r[0], r[1], r[2], r[3], i * 700)), 950);
+    $("#prev").disabled = state.step === 0;
+    $("#prev").style.opacity = state.step === 0 ? .35 : 1;
+    $("#next").textContent = state.step === STEPS.length - 1 ? "Concluir a obra do dia" : "Continuar";
+  }
+  $("#next").onclick = () => {
+    if (state.step < STEPS.length - 1) { state.step++; renderStep(); }
+    else { if (!state.done.has("reveal")) { state.done.add("reveal"); state.streak = 7; } show("done"); }
+  };
+  $("#prev").onclick = () => { if (state.step > 0) { state.step--; renderStep(); } };
+
+  /* ---------------- Done ---------------- */
+  function enterDone() {
+    if (!state.done.has("reveal")) { ["observe", "write", "mural", "reveal"].forEach((k) => state.done.add(k)); state.streak = 7; }
+    $("#done-streak").textContent = state.streak;
+  }
+
+  /* ---------------- Paywall sheet & toast ---------------- */
+  function openSheet(kind) {
+    $("#sheet-why").textContent = kind === "journal" ? "Diário pessoal" : "Arquivo de obras";
+    $("#sheet").hidden = false;
+    $("#subscribe").focus();
+  }
+  function closeSheet() { $("#sheet").hidden = true; }
+  $("#sheet-close").onclick = closeSheet;
+  $("#sheet").addEventListener("click", (e) => { if (e.target.id === "sheet") closeSheet(); });
+  $("#subscribe").onclick = () => { closeSheet(); toast("No protótipo a assinatura é só ilustrativa."); };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#sheet").hidden) closeSheet(); });
+  $("#notify").addEventListener("change", (e) => toast(e.target.checked ? "Lembrete diário às 8h ativado." : "Lembrete diário desativado."));
+  function toast(msg) {
+    const t = document.createElement("div");
+    t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg;
+    $("#phone").appendChild(t);
+    setTimeout(() => t.remove(), 2600);
+  }
+
+  $("#restart").onclick = () => {
+    Object.assign(state, { done: new Set(), text: "", pin: null, liked: new Set(), sort: "top", step: 0, streak: 6 });
+    $$(".sort .chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.sort === "top")));
+    $("#status").innerHTML = "";
+    show("home");
+  };
+
+  /* ---------------- Boot ---------------- */
+  viewers.observe = new Viewer($("#v-observe"));
+  viewers.write = new Viewer($("#v-write"), {
+    onTap: (fx, fy) => {
+      if (!pinMode) return;
+      state.pin = [fx, fy]; renderWritePin();
+      pinMode = false; $("#pin-mode").setAttribute("aria-pressed", "false");
+      $("#pin-state").textContent = "Detalhe marcado. Ele aparece no mural junto com sua leitura.";
+    }
+  });
+  viewers.mural = new Viewer($("#v-mural"));
+  viewers.reveal = new Viewer($("#v-reveal"), { interactive: false });
+  $$(".zoom-ctrl").forEach((el) => zoomControls(el, viewers[el.dataset.for]));
+  show("home");
+})();
+</script>
